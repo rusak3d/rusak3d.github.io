@@ -1,0 +1,11 @@
+Model Information:
+* title:	ARHAN R-881
+* source:	https://sketchfab.com/3d-models/arhan-r-881-3249fb2278cf427faab3d05c6aaa4f53
+* author:	Mayess (https://sketchfab.com/Mayess)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "ARHAN R-881" (https://sketchfab.com/3d-models/arhan-r-881-3249fb2278cf427faab3d05c6aaa4f53) by Mayess (https://sketchfab.com/Mayess) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
