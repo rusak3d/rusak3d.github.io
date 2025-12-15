@@ -1,3 +1,4 @@
+```
 rusak-k8-drive/
   index.html
 
@@ -30,3 +31,4 @@ rusak-k8-drive/
 
   /assets/
     (пусто, если модели грузим по URL)
+```
