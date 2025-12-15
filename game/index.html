@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Русак К-8 · Drive + Day/Night</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <!-- важно: работаем как ESM проект (через сервер), импортируем three по importmap -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <style>
+    :root{ color-scheme: light; --ui-font:'Oxanium',ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+    html,body{ height:100%; margin:0; background:#fff; overflow-x:hidden; }
+    canvas#bg{ position:fixed; inset:0; width:100vw; height:100vh; display:block; touch-action:none; }
+    .scroll-space{ height:240vh; }
+
+    .loader{ position:fixed; inset:0; display:grid; place-items:center; background:#fff; transition:opacity .35s ease, visibility .35s ease; z-index:10; }
+    .loader.hidden{ opacity:0; visibility:hidden; }
+    .spinner{ width:48px; height:48px; border-radius:999px; border:3px solid rgba(0,0,0,.12); border-top-color:rgba(0,0,0,.55); animation:spin 1s linear infinite; filter:drop-shadow(0 8px 24px rgba(0,0,0,.15)); }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
+
+    .error-dot{ position:fixed; right:16px; top:16px; width:10px; height:10px; border-radius:999px; background:#ff3b30; box-shadow:0 0 0 6px rgba(255,59,48,.15); opacity:0; transform:scale(.8); transition:opacity .2s ease, transform .2s ease; pointer-events:none; z-index:20; }
+    .error-dot.on{ opacity:1; transform:scale(1); }
+
+    .hud{ position:fixed; left:16px; top:14px; font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace; color:rgba(0,0,0,.72); background:rgba(255,255,255,.78); border:1px solid rgba(0,0,0,.08); border-radius:10px; padding:8px 10px; user-select:none; pointer-events:none; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); max-width:min(560px, calc(100vw - 32px)); white-space:pre-wrap; z-index:18; }
+
+    .topbar{ position:fixed; left:50%; top:14px; transform:translateX(-50%); width:min(980px, calc(100vw - 32px)); display:flex; gap:12px; align-items:stretch; justify-content:space-between; z-index:19; font-family:var(--ui-font); color:rgba(0,0,0,.86); }
+    .tb-left,.tb-center,.tb-right{ background:rgba(255,255,255,.55); border:1px solid rgba(0,0,0,.12); border-radius:16px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); box-shadow:0 14px 40px rgba(0,0,0,.10); }
+    .tb-left{ flex:1 1 46%; padding:10px 12px; min-width:240px; }
+    .tb-center{ flex:0 0 260px; padding:10px 12px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
+    .tb-right{ flex:1 1 22%; padding:10px 12px; display:flex; align-items:center; justify-content:flex-end; min-width:180px; }
+
+    .tb-title{ font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:rgba(0,0,0,.55); font-weight:800; }
+    .tb-tasks{ margin-top:6px; font-size:12px; font-weight:700; line-height:1.35; color:rgba(0,0,0,.86); }
+    .tb-count{ font-size:28px; font-weight:800; letter-spacing:.6px; }
+    .tb-progress{ width:100%; height:8px; border-radius:999px; background:rgba(0,0,0,.10); overflow:hidden; border:1px solid rgba(0,0,0,.10); }
+    .tb-fill{ height:100%; width:0%; background:rgba(0,0,0,.75); border-radius:999px; }
+    .tb-sub{ font-size:11px; font-weight:700; letter-spacing:.4px; color:rgba(0,0,0,.60); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+    .tb-chip{ display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border-radius:999px; background:rgba(0,0,0,.06); border:1px solid rgba(0,0,0,.10); font-weight:800; letter-spacing:.6px; text-transform:uppercase; font-size:11px; }
+
+    @media (max-width: 860px){
+      .topbar{ flex-wrap:wrap; }
+      .tb-center{ flex:1 1 100%; order:3; }
+      .tb-left{ flex:1 1 100%; order:1; }
+      .tb-right{ flex:1 1 100%; order:2; justify-content:flex-start; }
+    }
+
+    .legend{ position:fixed; left:50%; bottom:16px; transform:translateX(-50%); z-index:19; font-family:var(--ui-font); font-weight:700; letter-spacing:.6px; text-transform:uppercase; font-size:12px; color:rgba(0,0,0,.85); background:rgba(255,255,255,.55); border:1px solid rgba(0,0,0,.12); border-radius:999px; padding:10px 14px; backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); user-select:none; pointer-events:none; max-width:min(980px, calc(100vw - 32px)); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; box-shadow:0 14px 40px rgba(0,0,0,.10); }
+
+    .dash{ position:fixed; right:16px; bottom:70px; width:min(360px, calc(100vw - 32px)); border-radius:18px; background:rgba(255,255,255,.50); border:1px solid rgba(0,0,0,.12); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); box-shadow:0 14px 40px rgba(0,0,0,.12); z-index:18; padding:12px 12px 10px; font-family:var(--ui-font); user-select:none; }
+    .dash-top{ display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:10px; }
+    .clock{ flex:1 1 100%; align-items:stretch; }
+    .clock .row{ justify-content:space-between; flex-wrap:nowrap; }
+    .clock .label{ flex:1 1 auto; text-align:left; }
+    .clock .tval{ flex:0 0 auto; }
+    .clock .btn{ flex:0 0 auto; white-space:nowrap; }
+
+    .spd{ display:flex; align-items:baseline; gap:8px; }
+    .spd .val{ font-size:46px; line-height:1; letter-spacing:.5px; font-weight:700; color:rgba(0,0,0,.88); }
+    .spd .unit{ font-size:12px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:rgba(0,0,0,.55); transform:translateY(-4px); }
+    .gear,.clock{ display:flex; flex-direction:column; align-items:flex-end; gap:4px; }
+    .gear .label,.clock .label{ font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:rgba(0,0,0,.50); font-weight:700; }
+    .gear .gval{ display:flex; align-items:center; gap:8px; font-weight:700; color:rgba(0,0,0,.90); }
+    .pill{ padding:6px 10px; border-radius:999px; background:rgba(0,0,0,.06); border:1px solid rgba(0,0,0,.08); font-size:14px; min-width:44px; text-align:center; }
+    .clock .tval{ font-size:16px; font-weight:800; letter-spacing:1.1px; color:rgba(0,0,0,.88); padding:5px 9px; border-radius:999px; background:rgba(0,0,0,.06); border:1px solid rgba(0,0,0,.08); min-width:70px; text-align:center; }
+    .clock .row{ display:flex; gap:6px; align-items:center; justify-content:flex-end; }
+    .clock .btn{ padding:6px 9px; border-radius:999px; }
+    .clock input[type="range"]{ height:18px; margin-top:4px !important; }
+
+    .rpm-wrap{ margin-top:10px; }
+    .rpm-head{ display:flex; align-items:center; justify-content:space-between; }
+    .rpm-head .t{ font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:rgba(0,0,0,.52); font-weight:600; }
+    .rpm-head .v{ font-size:12px; color:rgba(0,0,0,.78); font-weight:700; }
+    .rpm-bar{ margin-top:6px; height:10px; border-radius:999px; background:rgba(0,0,0,.08); overflow:hidden; border:1px solid rgba(0,0,0,.10); position:relative; }
+    .rpm-fill{ height:100%; width:10%; border-radius:999px; background:rgba(0,0,0,.78); }
+    .rpm-ticks{ position:absolute; inset:0; display:flex; justify-content:space-between; opacity:.55; }
+    .rpm-ticks span{ width:1px; background:rgba(255,255,255,.9); margin:2px 0; }
+
+    .dash-bot{ margin-top:10px; display:flex; gap:10px; align-items:center; justify-content:space-between; }
+    .btnrow{ display:flex; gap:8px; }
+    .btn{ pointer-events:auto; cursor:pointer; border:1px solid rgba(0,0,0,.14); background:rgba(255,255,255,.65); padding:8px 10px; border-radius:12px; font-family:var(--ui-font); font-weight:700; letter-spacing:.6px; text-transform:uppercase; font-size:12px; color:rgba(0,0,0,.85); transition:transform .08s ease, background .12s ease; }
+    .btn:active{ transform:translateY(1px); }
+    .btn[data-active="1"]{ background:rgba(0,0,0,.10); }
+
+    .minimap-wrap{ position:fixed; left:16px; bottom:70px; width:220px; height:220px; border-radius:999px; overflow:hidden; background:rgba(255,255,255,.42); border:1px solid rgba(0,0,0,.12); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); pointer-events:none; z-index:15; }
+    #minimap, #minimapOverlay{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  </style>
+</head>
+
+<body>
+  <div class="loader" id="loader"><div class="spinner" aria-hidden="true"></div></div>
+  <div class="error-dot" id="errdot" aria-hidden="true"></div>
+  <div class="hud" id="hud" aria-hidden="true">loading…</div>
+
+  <div class="topbar" id="topbar" aria-hidden="false">
+    <div class="tb-left">
+      <div class="tb-title">Задания</div>
+      <div class="tb-tasks" id="taskList">—</div>
+    </div>
+    <div class="tb-center">
+      <div class="tb-count"><span id="tasksDone">0</span>/<span id="tasksTotal">0</span></div>
+      <div class="tb-progress" aria-hidden="true"><div class="tb-fill" id="tasksFill"></div></div>
+      <div class="tb-sub" id="taskHint">Подъедь к маркеру</div>
+    </div>
+    <div class="tb-right">
+      <div class="tb-chip" id="cargoState">Груз: —</div>
+    </div>
+  </div>
+
+  <div class="legend" id="legend" aria-hidden="true">
+    WASD drive · Space brake · Shift boost · Ctrl/Cmd+Wheel zoom · H helpers · 1/2/3 color · T time auto/manual · G drive/scroll · C chase
+  </div>
+
+  <div class="dash" id="dash" aria-hidden="false">
+    <div class="dash-top">
+      <div class="spd">
+        <div class="val" id="spdVal">0</div>
+        <div class="unit">km/h</div>
+      </div>
+      <div class="gear">
+        <div class="label">transmission</div>
+        <div class="gval">
+          <div class="pill" id="gearMode">D</div>
+          <div class="pill" id="gearVal">1</div>
+        </div>
+      </div>
+      <div class="clock">
+        <div class="row">
+          <div class="label">time</div>
+          <div class="tval" id="timeVal">12:00</div>
+          <button class="btn" id="timeAuto" type="button">Auto</button>
+        </div>
+        <input id="timeSlider" type="range" style="width:100%; margin-top:4px;" />
+      </div>
+    </div>
+
+    <div class="rpm-wrap">
+      <div class="rpm-head">
+        <div class="t">rpm</div>
+        <div class="v" id="rpmVal">800</div>
+      </div>
+      <div class="rpm-bar" aria-hidden="true">
+        <div class="rpm-fill" id="rpmFill"></div>
+        <div class="rpm-ticks">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-bot">
+      <div class="btnrow">
+        <button class="btn" id="btnStock" type="button">Stock</button>
+        <button class="btn" id="btnOrange" type="button">Orange</button>
+        <button class="btn" id="btnNavy" type="button">Navy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="minimap-wrap" id="minimapWrap" aria-hidden="true">
+    <canvas id="minimap"></canvas>
+    <canvas id="minimapOverlay"></canvas>
+  </div>
+
+  <canvas id="bg"></canvas>
+  <div class="scroll-space" aria-hidden="true"></div>
+
+  <!-- один входной модуль -->
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
